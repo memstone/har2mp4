@@ -39,33 +39,31 @@ def parseHAR(f):
 
     tsDict = {}
     m3uList = []
-
     for e in data["log"]["entries"]:
-        if not ("content" in e["response"] and "mimeType" in e["response"]["content"]): continue
+        # 获取 m3u8 文件内容
+        if e["request"]["url"].endswith(".m3u8"):
+            txt = e["response"]["content"]["text"]
+            if "encoding" in e["response"]["content"]:
+                if e["response"]["content"]["encoding"] == "base64":
+                    txt = base64.b64decode(txt, "utf-8")
+                else:
+                    raise Exception(f"未实现的 m3u8 文件编码格式: {e["response"]["content"]["encoding"]}")
+            else:
+                # #EXTM3U：表明该文件是一个 m3u8 文件。每个 M3U 文件必须将该标签放置在第一行。
+                if txt.find(r"\n", 0, 15) != -1:
+                    txt =txt.replace(r"\n", "\n")
+
+            m3uList.append([
+                ptnM3u.search(e["request"]["url"]).group(),
+                txt
+            ])
+            continue
+        
         # 以文件名为 key, 添加 bytes 内容
-        if e["response"]["content"]["mimeType"] == r"video/mp2t":
+        if "mimeType" in e["response"]["content"] and e["response"]["content"]["mimeType"] == r"video/mp2t":
             tsDict[ptnTs.search(e["request"]["url"]).group()] = base64.b64decode(e["response"]["content"]["text"])
             continue
         
-        if not(e["request"]["url"].endswith(".m3u8")): continue
-        
-        # 获取 m3u8 文件内容
-        txt = e["response"]["content"]["text"]
-        if "encoding" in e["response"]["content"]:
-            if e["response"]["content"]["encoding"] == "base64":
-                txt = base64.b64decode(txt, "utf-8")
-            else:
-                raise Exception(f"未实现的 m3u8 文件编码格式: {e["response"]["content"]["encoding"]}")
-        else:
-            # #EXTM3U：表明该文件是一个 m3u8 文件。每个 M3U 文件必须将该标签放置在第一行。
-            if txt.find(r"\n", 0, 15) != -1:
-                txt =txt.replace(r"\n", "\n")
-
-        m3uList.append([
-            ptnM3u.search(e["request"]["url"]).group(),
-            txt
-        ])
-
     return {"ts": tsDict, "m3u": m3uList}
 
 # 返回 ts 列表，忽略 m3u8 文件头
